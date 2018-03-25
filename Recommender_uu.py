@@ -1,4 +1,5 @@
 import sys
+import os
 import pickle
 
 from pyspark.mllib.linalg.distributed import CoordinateMatrix, MatrixEntry
@@ -17,9 +18,9 @@ class Recommender_uu():
         self.utility = utility 
         self.threshold = threshold
 
-        if sim_file == None:
+        if sim_file == None or os.path.exists(sim_file) == False:
             self.sim = self._calculateSimilarity()
-            with open("sim_matrix", "wb") as handle:
+            with open(sim_file, "wb") as handle:
                 pickle.dump(self.sim, handle, protocol=pickle.HIGHEST_PROTOCOL)
         else:
             with open(sim_file, "rb") as handle:
@@ -79,10 +80,10 @@ def main():
     rating_file = sys.argv[2]
 
     spark = SparkSession.builder.getOrCreate()
-    utility = readRatings(spark, rating_file)
+    (utility, test_utility) = readRatings(spark, rating_file)
 
-    recommender = Recommender_uu(utility, sim_file="./sim_matrix")
-    rating = recommender.predictRating(1, 1405, threshold=0.2)
+    recommender = Recommender_uu(utility, sim_file="./training_matrix")
+    rating = recommender.predictRating(1, 1405, threshold=0)
     print(rating)
 
 

@@ -41,16 +41,19 @@ def normalize(spark, df):
     """
 
 
-def readRatings(spark, f_name):
+def readRatings(spark, f_name, ratio=[0.8, 0.2], seed=0):
     """ Read the rating of users for movies 
         Return the utility matrix"""
     df = spark.read.csv(f_name, header=True)
     #df = normalize(spark, df)
     rdd = df.rdd
+
+    (training, test) = df.randomSplit(ratio, seed=seed)
     
-    utility = CoordinateMatrix(rdd.map(lambda row: MatrixEntry(row['userId'], row['movieId'], row['rating'])))
+    training_utility = CoordinateMatrix(training.rdd.map(lambda row: MatrixEntry(row['userId'], row['movieId'], row['rating'])))
+    test_utility = CoordinateMatrix(test.rdd.map(lambda row: MatrixEntry(row['userId'], row['movieId'], row['rating'])))
     
-    return utility
+    return (training_utility, test_utility)
 
 
 
@@ -65,7 +68,7 @@ def main():
     #rating_df.show()
 
     spark = SparkSession.builder.getOrCreate()
-    utility = readRatings(spark, rating_file)
+    (utility, test_utility) = readRatings(spark, rating_file)
     rdd = utility.entries
 
     print(utility.numRows())
