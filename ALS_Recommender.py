@@ -16,7 +16,7 @@ def main():
     training = training_utility.entries.map(lambda x: (x.i, x.j, x.value)).toDF(['userId', 'movieId', 'rating'])
     test = test_utility.entries.map(lambda x: (x.i, x.j, x.value)).toDF(['userId', 'movieId', 'rating'])
 
-    als = ALS(maxIter=5, rank=70, regParam=0.01, coldStartStrategy='drop', \
+    als = ALS(maxIter=20, rank=70, regParam=0.01, coldStartStrategy='drop', \
             userCol='userId', itemCol='movieId', ratingCol='rating')
     als.setSeed(0)
 
