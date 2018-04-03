@@ -1,5 +1,7 @@
 import sys 
-from pyspark.sql import SparkSession
+from pyspark.conf import SparkConf
+from pyspark.context import SparkContext
+from pyspark.sql import SparkSession, SQLContext
 from pyspark.mllib.linalg import Matrix, Matrices
 from pyspark.mllib.linalg.distributed import CoordinateMatrix, MatrixEntry
 from pyspark.sql import Row
@@ -67,13 +69,25 @@ def main():
     #movie_df.show()
     #rating_df.show()
 
-    spark = SparkSession.builder.getOrCreate()
+    conf = SparkConf().setAppName("App")
+    conf = (conf.setMaster('local[*]') \
+        .set('spark.executor.memory', '4G') \
+        .set('spark.driver.memory', '45G') \
+        .set('spark.driver.maxResultSize', '10G'))
+    sc = SparkContext(conf=conf)
+    sqlContext = SQLContext(sc)
+    spark = sqlContext.sparkSession
+    
     (utility, test_utility) = readRatings(spark, rating_file)
     rdd = utility.entries
 
     print(utility.numRows())
     print(utility.numCols())
     print(rdd.top(10))
+
+    print('\n\n')
+    cs = test_utility.toBlockMatrix().toLocalMatrix()
+    print(cs)
 
 if __name__ == "__main__":
     main()
