@@ -14,11 +14,14 @@ class Recommender_uu():
     threshold = 0
     sim = None
     sim_set = None
+    groupRdd = None
 
 
     def __init__(self, utility, threshold=0, sim_file=None):
         self.utility = utility 
         self.threshold = threshold
+        self.groupRdd = utility.entries.groupBy(lambda x: x.i).map(lambda x: (x[0], [(each.j, each.value) for each in x[1]]))
+        #print(self.groupRdd.take(3))
 
         if sim_file == None or os.path.exists(sim_file) == False:
             (self.sim, self.sim_set) = self._calculateSimilarity()
@@ -35,18 +38,27 @@ class Recommender_uu():
         user_cnt = self.utility.numRows()
 
         user_sim_set = self.sim_set[user_id]
-        items = rdd.filter(lambda x: (x.i in user_sim_set) and (x.j ==movie_id) ).collect()
-        #users = self.groupedRdd.filter(lambda x: x[0] in sim_set)
+        #items = rdd.filter(lambda x: (x.i in user_sim_set) and (x.j ==movie_id) ).collect()
+        #cnt = rdd.filter(lambda x: (x.i in user_sim_set) and (x.j ==movie_id) ).count()
+        #rating_sum = rdd.filter(lambda x: (x.i in user_sim_set) and (x.j ==movie_id) ).map(lambda x: x.value).sum()
+        candidate = self.groupRdd.filter(lambda x: x[0] in user_sim_set).map(lambda x: x[1]).filter(lambda x: movie_id in [each[0] for each in x]).flatMap(lambda x: x)
+        cnt = candidate.count()
+        rating_sum = candidate.map(lambda x: x[1]).sum()
 
-        rating = divider = 0
-        for item in items:
-            rating = rating + self.sim[(user_id, item.i)]*item.value
-            divider = divider + self.sim[(user_id, item.i)]
-        
-        if rating==0 or divider==0:
+        if cnt == 0:
             return 0
         else:
-            return rating / divider
+            return rating_sum/cnt
+
+        #rating = divider = 0
+        #for item in items:
+        #    rating = rating + self.sim[(user_id, item.i)]*item.value
+        #    divider = divider + self.sim[(user_id, item.i)]
+        #
+        #if rating==0 or divider==0:
+        #    return 0
+        #else:
+        #    return rating / divider
 
 
     def _calculateSimilarity(self, threshold=0):
@@ -81,8 +93,11 @@ class Recommender_uu():
                 sims_set[i].append(j)
         return (sims, sims_set)
 
+
+
 def getPredictions(spark, recommender, utility, threshold=0):
     items = utility.entries.map(lambda x: (x.i, x.j)).collect()
+    count = len(items)
     predictions = list()
     
     i = 0
@@ -92,9 +107,20 @@ def getPredictions(spark, recommender, utility, threshold=0):
 
         if i%10 == 0:
             print("Iteration: "+ str(i) )
+            print("Complete %" + str(float(i)/count*100))
         i = i+1
 
-    return spark.sparkContext.parallize(predictions)
+    return spark.sparkContext.parallelize(predictions)
+
+def getTopKRecommendation(predictions, movies, user_id, k):
+    recomm_ids = predictions.rdd.filter(lambda x: x['index'][0] == user_id).sortBy(lambda x: x['prediction'], ascending=False)
+    recomm_ids = recomm_ids.map(lambda x: int(x['index'][1])).take(k)
+    recomm_movies =  movies.rdd.filter(lambda x: int(x['movieId']) in recomm_ids).map(lambda x: (int(x['movieId']), x['title']))
+    movie_list = list()
+    for each in recomm_ids:
+        movie = recomm_movies.filter(lambda x: x[0] == each).map(lambda x: x[1]).collect() 
+        movie_list.append(movie[0])
+    return movie_list
 
 
 def main():
@@ -102,22 +128,30 @@ def main():
     rating_file = sys.argv[2]
 
     spark = SparkSession.builder.getOrCreate()
-    (training_utility, test_utility) = readRatings(spark, rating_file)
+    (training_utility, test_utility) = readRatings(spark, rating_file, ratio=[0.80, 0.20])
+    movies = readMovies(spark, movie_file)
 
     recommender = Recommender_uu(training_utility, sim_file="./training_matrix")
 
+    rating = recommender.predictRating(1, 9)
+    print(rating)
+
     actual_rating = test_utility.entries.map(lambda x: ((x.i, x.j), x.value)).toDF(['index', 'rating'])
+    print(actual_rating.count())
     predictions = getPredictions(spark, recommender, test_utility, 0).toDF(['index', 'prediction'])
-    #predictions = test_utility.entries.map(lambda x: ((x.i, x.j), recommender.predictRating(x.i, x.j, 0)))
 
-    print(actual_rating.take(10))
+    #print(actual_rating.take(10))
+
     #print(predictions.top(10))
-    #predictions = predictions.join(actual_rating, "index")
-    #evaluator = RegressionEvaluator(metricName='rmse', labelCol='rating', predictionCol='prediction')
+    predictions = predictions.join(actual_rating, "index")
+    evaluator = RegressionEvaluator(metricName='rmse', labelCol='rating', predictionCol='prediction')
+    rmse = evaluator.evaluate(predictions)
+    print(rmse)
 
-    #rmse = evaluator.evaluate(predictions)
-    #print(rmse)
-
+    print('\n')
+    movie_list = getTopKRecommendation(predictions, movies, 1, k=10)
+    for each in movie_list:
+        print(each)
 
 if __name__ == "__main__":
     main()
