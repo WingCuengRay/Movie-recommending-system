@@ -7,6 +7,9 @@ from pyspark.mllib.linalg.distributed import CoordinateMatrix, MatrixEntry
 from pyspark.sql import Row
 
 
+users_total = 672
+movies_total = 164980
+
 def readMovies(spark, f_name):
     """ Read the information about movies from f_name and return a dataframe  """
     rdd = spark.read.csv(f_name, header=True).rdd
@@ -52,8 +55,8 @@ def readRatings(spark, f_name, ratio=[0.8, 0.2], seed=0):
 
     (training, test) = df.randomSplit(ratio, seed=seed)
     
-    training_utility = CoordinateMatrix(training.rdd.map(lambda row: MatrixEntry(row['userId'], row['movieId'], row['rating'])))
-    test_utility = CoordinateMatrix(test.rdd.map(lambda row: MatrixEntry(row['userId'], row['movieId'], row['rating'])))
+    training_utility = CoordinateMatrix(training.rdd.map(lambda row: MatrixEntry(row['userId'], row['movieId'], row['rating'])), users_total, movies_total)
+    test_utility = CoordinateMatrix(test.rdd.map(lambda row: MatrixEntry(row['userId'], row['movieId'], row['rating'])), users_total, movies_total)
     
     return (training_utility, test_utility)
 

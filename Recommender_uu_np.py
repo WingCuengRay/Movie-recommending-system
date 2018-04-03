@@ -32,6 +32,21 @@ def readRating(f_name, ratio=[0.8, 0.2], seed=0):
 
     return (matrix, test_data)
 
+def readMovieList(f_name):
+    my_data = list()
+    with open(f_name, 'r') as handle:
+        reader = csv.reader(handle, delimiter=",", quotechar='"')
+        for row in reader:
+            my_data.append(row)
+    my_data.pop(0)
+    movie_list = dict()
+
+    for movie in my_data:
+        movie_id = int(movie[0])
+        movie_list[movie_id] = movie[1]
+
+    return movie_list
+
 
 
 def normalize(matrix):
@@ -85,19 +100,39 @@ def predictTestData(test_data, matrix, sim, threshold=0):
 
     return predictions
 
+def topKRecommendation(matrix, sim, movie_list, userId, k):
+    candidates = list()
+    for j in range(len(matrix[userId])):
+        if(matrix[userId][j] == 0):
+            rating = predictItem(userId, j, matrix, sim);
+            candidates.append((j, rating))
+
+    k = k if k<len(candidates) else len(candidates)
+    topK = sorted(candidates, key=lambda x: x[1], reverse=True)[:k]
+
+    return [movie_list[each[0]] for each in topK]
+
+
 
 def main():
-    f_name = sys.argv[1]
-    matrix, test_data = readRating(f_name)
+    movie_name = sys.argv[1]
+    rating_name = sys.argv[2]
+
+    movie_list = readMovieList(movie_name)
+    matrix, test_data = readRating(rating_name)
     print(matrix.shape)
     print(test_data.shape)
 
     norm_matrix = normalize(matrix)
     similarity = getSimilarity(norm_matrix)
-    predictions = predictTestData(test_data, matrix, similarity.toarray(), 0)
 
-    rmse = np.sqrt(np.mean((predictions[:][2]-test_data[:][2])**2))
-    print(rmse)
+    #predictions = predictTestData(test_data, matrix, similarity.toarray(), 0)
+    #rmse = np.sqrt(np.mean((predictions[:][2]-test_data[:][2])**2))
+    #print(rmse)
+
+    movies = topKRecommendation(matrix, similarity.toarray(), movie_list, 1, 10)
+    print(movies)
+
     #rating = predictItem(671, 6565, matrix, similarity.toarray())
     #print(rating)
     #print(similarity.toarray())
